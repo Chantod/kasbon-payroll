@@ -143,7 +143,51 @@ else:
 
     st.header("📊 Dashboard Owner")
 
-    df = load_data()
+df = load_data()
+
+if df.empty:
+    st.info("Belum ada data kasbon")
+else:
+
+    # ================= REKAP TOTAL PER NAMA =================
+    st.subheader("📌 Rekap Total Kasbon Per Karyawan")
+
+    summary = df.groupby("nama")["nominal"].sum().reset_index()
+    summary = summary.sort_values("nominal", ascending=False)
+
+    st.dataframe(summary, use_container_width=True)
+
+    # ================= PILIH NAMA UNTUK DETAIL =================
+    st.markdown("---")
+    st.subheader("🔎 Detail Riwayat Per Karyawan")
+
+    pilih_nama = st.selectbox("Pilih Karyawan", summary["nama"])
+
+    df_nama = df[df["nama"] == pilih_nama].sort_values("tanggal", ascending=False)
+
+    if not df_nama.empty:
+        st.dataframe(
+            df_nama[["tanggal", "nominal", "keterangan", "periode"]],
+            use_container_width=True
+        )
+
+        total_nama = df_nama["nominal"].sum()
+        st.success(f"Total Kasbon {pilih_nama}: Rp {total_nama:,.0f}")
+
+        # ================= REKAP PER PERIODE =================
+        st.markdown("### 📆 Rekap Per Periode")
+        periode_summary = df_nama.groupby("periode")["nominal"].sum().reset_index()
+        st.dataframe(periode_summary, use_container_width=True)
+
+    else:
+        st.info("Belum ada data untuk karyawan ini")
+
+    # ================= GRAFIK =================
+    st.markdown("---")
+    st.subheader("📊 Grafik Total Kasbon")
+
+    fig = px.bar(summary, x="nama", y="nominal", color="nama")
+    st.plotly_chart(fig, use_container_width=True)
 
     if df.empty:
         st.info("Belum ada data kasbon")
@@ -212,3 +256,4 @@ else:
     if st.button("Logout"):
         st.session_state.login = None
         st.rerun()
+
