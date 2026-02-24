@@ -12,8 +12,8 @@ from supabase import create_client
 st.set_page_config(page_title="Kasbon Payroll Enterprise", layout="wide")
 
 # ================== SUPABASE ==================
-url = st.secrets["https://rcvljirmzgiwikflcafj.supabase.co"]
-key = st.secrets["sb_publishable_7ZaOZM35gyZ4eVw4HIbXAg_Dtlc7xgx"]
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
 # ================== DATA KARYAWAN ==================
@@ -182,3 +182,4 @@ else:
     if st.button("Logout"):
         st.session_state.login = None
         st.rerun()
+
