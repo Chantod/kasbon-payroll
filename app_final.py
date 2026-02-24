@@ -53,7 +53,7 @@ def load_data():
 if "login" not in st.session_state:
     st.session_state.login = None
 
-st.title("💰 Sistem Kasbon Payroll Enterprise")
+st.title("💰 Kasbon Ayam Penyet Neng Itok")
 
 # ================= LOGIN =================
 if st.session_state.login is None:
@@ -216,4 +216,5 @@ else:
     if st.button("Logout", key="logout_owner"):
         st.session_state.login = None
         st.rerun()
+
 
