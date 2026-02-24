@@ -11,12 +11,12 @@ from supabase import create_client
 
 st.set_page_config(page_title="Kasbon Payroll Enterprise", layout="wide")
 
-# ================== SUPABASE ==================
+# ================= SUPABASE =================
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
-# ================== DATA KARYAWAN ==================
+# ================= DATA KARYAWAN =================
 karyawan_data = {
     "Hana": {"pin": "1234", "limit": 3000000},
     "Tuje": {"pin": "2222", "limit": 3000000},
@@ -27,9 +27,9 @@ karyawan_data = {
     "Dhafa": {"pin": "7777", "limit": 1500000},
 }
 
-OWNER_PASSWORD = "torch123"
+OWNER_PASSWORD = "owner123"
 
-# ================== FUNGSI PERIODE ==================
+# ================= FUNGSI PERIODE =================
 def get_periode(tgl):
     tgl = pd.to_datetime(tgl)
     if tgl.day >= 25:
@@ -46,21 +46,24 @@ def get_periode(tgl):
         end = datetime(tgl.year, tgl.month, 24)
     return f"{start.strftime('%d %b %Y')} - {end.strftime('%d %b %Y')}"
 
-# ================== LOAD DATA ==================
+# ================= LOAD DATA =================
 def load_data():
-    data = supabase.table("kasbon").select("*").execute()
-    df = pd.DataFrame(data.data)
-    if not df.empty:
+    response = supabase.table("kasbon").select("*").execute()
+    if response.data:
+        df = pd.DataFrame(response.data)
         df["Tanggal"] = pd.to_datetime(df["tanggal"], errors="coerce")
-    return df
+        return df
+    return pd.DataFrame()
 
-# ================== LOGIN ==================
+# ================= LOGIN STATE =================
 if "login" not in st.session_state:
     st.session_state.login = None
 
 st.title("💰 Sistem Kasbon Payroll Enterprise")
 
+# ================= LOGIN =================
 if st.session_state.login is None:
+
     role = st.selectbox("Login sebagai", ["Karyawan", "Owner"])
 
     if role == "Karyawan":
@@ -83,7 +86,7 @@ if st.session_state.login is None:
             else:
                 st.error("Password salah")
 
-# ================== KARYAWAN ==================
+# ================= KARYAWAN =================
 elif st.session_state.login[0] == "karyawan":
 
     nama = st.session_state.login[1]
@@ -97,13 +100,9 @@ elif st.session_state.login[0] == "karyawan":
 
     df = load_data()
 
-    if not df.empty:
-        df_periode = df[(df["nama"] == nama)]
-        total = df_periode["nominal"].sum()
-    else:
-        total = 0
-
+    total = df[df["nama"] == nama]["nominal"].sum() if not df.empty else 0
     sisa = limit - total
+
     st.info(f"Sisa Limit Anda: Rp {sisa:,.0f}")
 
     if st.button("Ajukan Kasbon"):
@@ -125,51 +124,18 @@ elif st.session_state.login[0] == "karyawan":
         st.session_state.login = None
         st.rerun()
 
-# ================== OWNER ==================
+# ================= OWNER =================
 else:
 
     st.header("📊 Dashboard Owner")
-    st.subheader("🗑 Hapus Data Kasbon")
-
-if not df.empty:
-
-    # ================= HAPUS PER BARIS =================
-    st.markdown("### Hapus Per Transaksi")
-    pilih_id = st.selectbox("Pilih ID untuk dihapus", df["id"])
-
-    if st.button("Hapus Transaksi Ini"):
-        supabase.table("kasbon").delete().eq("id", pilih_id).execute()
-        st.success("Transaksi berhasil dihapus")
-        st.rerun()
-
-    st.markdown("---")
-
-    # ================= HAPUS PER KARYAWAN =================
-    st.markdown("### Hapus Semua Kasbon Per Karyawan")
-    pilih_nama = st.selectbox("Pilih Karyawan", df["nama"].unique())
-
-    if st.button("Hapus Semua Data Karyawan Ini"):
-        supabase.table("kasbon").delete().eq("nama", pilih_nama).execute()
-        st.success("Semua data karyawan dihapus")
-        st.rerun()
-
-    st.markdown("---")
-
-    # ================= HAPUS SEMUA DATA =================
-    st.markdown("### ⚠ Hapus Semua Data (Danger Zone)")
-    konfirmasi = st.checkbox("Saya yakin ingin menghapus SEMUA data")
-
-    if konfirmasi:
-        if st.button("Hapus Semua Data Sekarang"):
-            supabase.table("kasbon").delete().neq("id", "").execute()
-            st.success("Semua data berhasil dihapus")
-            st.rerun()
 
     df = load_data()
 
-    if not df.empty:
+    if df.empty:
+        st.info("Belum ada data kasbon")
+    else:
 
-        st.subheader("Ringkasan")
+        st.subheader("Ringkasan per Karyawan")
 
         summary = df.groupby("nama")["nominal"].sum().reset_index()
 
@@ -185,12 +151,38 @@ if not df.empty:
         st.subheader("Data Lengkap")
         st.dataframe(df)
 
-        # ===== PDF Slip =====
-        st.subheader("Cetak Slip")
+        # ================= HAPUS DATA =================
+        st.subheader("🗑 Hapus Data")
 
-        pilih = st.selectbox("Pilih ID Kasbon", df["id"])
+        col1, col2 = st.columns(2)
 
-        if st.button("Cetak PDF"):
+        with col1:
+            pilih_id = st.selectbox("Hapus Per Transaksi", df["id"])
+            if st.button("Hapus Transaksi"):
+                supabase.table("kasbon").delete().eq("id", pilih_id).execute()
+                st.success("Berhasil dihapus")
+                st.rerun()
+
+        with col2:
+            pilih_nama = st.selectbox("Hapus Semua Per Karyawan", df["nama"].unique())
+            if st.button("Hapus Semua Data Karyawan"):
+                supabase.table("kasbon").delete().eq("nama", pilih_nama).execute()
+                st.success("Semua data dihapus")
+                st.rerun()
+
+        st.markdown("---")
+
+        if st.checkbox("⚠ Saya yakin ingin hapus SEMUA data"):
+            if st.button("Hapus Semua Data"):
+                supabase.table("kasbon").delete().neq("id", "").execute()
+                st.success("Semua data berhasil dihapus")
+                st.rerun()
+
+        # ================= CETAK PDF =================
+        st.subheader("Cetak Slip PDF")
+        pilih = st.selectbox("Pilih ID Slip", df["id"])
+
+        if st.button("Buat PDF"):
             row = df[df["id"] == pilih].iloc[0]
 
             file_name = "slip_kasbon.pdf"
@@ -211,11 +203,6 @@ if not df.empty:
             with open(file_name, "rb") as f:
                 st.download_button("Download Slip PDF", f, file_name)
 
-    else:
-        st.info("Belum ada data kasbon")
-
     if st.button("Logout"):
         st.session_state.login = None
         st.rerun()
-
-
