@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
 from supabase import create_client
 
-st.set_page_config(page_title="Kasbon Payroll Enterprise", layout="wide")
+st.set_page_config(page_title="Kasbon Ayam Penyet Neng Itok", layout="wide")
 
 # ================= SUPABASE =================
 url = st.secrets["SUPABASE_URL"]
@@ -216,3 +216,4 @@ else:
     if st.button("Logout", key="logout_owner"):
         st.session_state.login = None
         st.rerun()
+
