@@ -1,290 +1,184 @@
 import streamlit as st
 import pandas as pd
-import os
-from datetime import datetime, date
 import uuid
+from datetime import datetime, date
 import plotly.express as px
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
-import shutil
+from supabase import create_client
 
 st.set_page_config(page_title="Kasbon Payroll Enterprise", layout="wide")
 
-# ================= CONFIG =================
+# ================== SUPABASE ==================
+url = st.secrets["https://rcvljirmzgiwikflcafj.supabase.co"]
+key = st.secrets["sb_publishable_7ZaOZM35gyZ4eVw4HIbXAg_Dtlc7xgx"]
+supabase = create_client(url, key)
 
-OWNER_PASSWORD = "owner123"
-
-EMPLOYEES = {
-    "Budi": {"pin": "1111", "limit": 2000000},
-    "Andi": {"pin": "2222", "limit": 1500000},
-    "Siti": {"pin": "3333", "limit": 1000000},
+# ================== DATA KARYAWAN ==================
+karyawan_data = {
+    "Hana": {"pin": "1234", "limit": 3000000},
+    "Tuje": {"pin": "2222", "limit": 3000000},
+    "Icha": {"pin": "3333", "limit": 2500000},
+    "Fikri": {"pin": "4444", "limit": 1900000},
+    "Iki": {"pin": "5555", "limit": 1600000},
+    "Lia": {"pin": "6666", "limit": 1500000},
+    "Dhafa": {"pin": "7777", "limit": 1500000},
 }
 
-DATA_FILE = "kasbon_data.csv"
-BACKUP_FILE = "kasbon_backup.csv"
+OWNER_PASSWORD = "torch123"
 
-# ================= SAFE LOAD DATA =================
-
-def safe_load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            df = pd.read_csv(DATA_FILE)
-        except:
-            st.error("File CSV rusak. Membuat file baru.")
-            return pd.DataFrame(columns=["ID","Tanggal","Nama","Nominal","Keterangan"])
+# ================== FUNGSI PERIODE ==================
+def get_periode(tgl):
+    tgl = pd.to_datetime(tgl)
+    if tgl.day >= 25:
+        start = datetime(tgl.year, tgl.month, 25)
+        if tgl.month == 12:
+            end = datetime(tgl.year + 1, 1, 24)
+        else:
+            end = datetime(tgl.year, tgl.month + 1, 24)
     else:
-        return pd.DataFrame(columns=["ID","Tanggal","Nama","Nominal","Keterangan"])
+        if tgl.month == 1:
+            start = datetime(tgl.year - 1, 12, 25)
+        else:
+            start = datetime(tgl.year, tgl.month - 1, 25)
+        end = datetime(tgl.year, tgl.month, 24)
+    return f"{start.strftime('%d %b %Y')} - {end.strftime('%d %b %Y')}"
 
-    # Pastikan kolom wajib ada
-    required_cols = ["ID","Tanggal","Nama","Nominal","Keterangan"]
-    for col in required_cols:
-        if col not in df.columns:
-            df[col] = None
-
-    # Convert tanggal aman
-    df["Tanggal"] = pd.to_datetime(
-        df["Tanggal"],
-        format="mixed",
-        errors="coerce"
-    )
-
-    # Hapus baris tanggal rusak
-    df = df.dropna(subset=["Tanggal"])
-
-    # Convert nominal aman
-    df["Nominal"] = pd.to_numeric(df["Nominal"], errors="coerce").fillna(0)
-
+# ================== LOAD DATA ==================
+def load_data():
+    data = supabase.table("kasbon").select("*").execute()
+    df = pd.DataFrame(data.data)
+    if not df.empty:
+        df["Tanggal"] = pd.to_datetime(df["tanggal"], errors="coerce")
     return df
 
-def backup_data():
-    if os.path.exists(DATA_FILE):
-        shutil.copy(DATA_FILE, BACKUP_FILE)
+# ================== LOGIN ==================
+if "login" not in st.session_state:
+    st.session_state.login = None
 
-df = safe_load_data()
+st.title("💰 Sistem Kasbon Payroll Enterprise")
 
-# ================= UTIL =================
+if st.session_state.login is None:
+    role = st.selectbox("Login sebagai", ["Karyawan", "Owner"])
 
-def format_rp(x):
-    return f"Rp {x:,.0f}".replace(",", ".")
-
-def get_periode(tanggal):
-    tanggal = pd.to_datetime(tanggal)
-
-    if tanggal.day >= 25:
-        start = tanggal.replace(day=25)
-        end = (start + pd.DateOffset(months=1)).replace(day=24)
-    else:
-        start = (tanggal - pd.DateOffset(months=1)).replace(day=25)
-        end = tanggal.replace(day=24)
-
-    return f"{start.strftime('%Y-%m-%d')} s/d {end.strftime('%Y-%m-%d')}"
-
-# ================= SESSION =================
-
-if "role" not in st.session_state:
-    st.session_state.role = None
-    st.session_state.user = None
-
-# ================= LOGIN =================
-
-if st.session_state.role is None:
-
-    st.title("🔐 Sistem Kasbon Payroll Enterprise")
-
-    mode = st.radio("Login sebagai:", ["Karyawan", "Owner"])
-
-    if mode == "Karyawan":
-        nama = st.selectbox("Nama", list(EMPLOYEES.keys()))
+    if role == "Karyawan":
+        nama = st.selectbox("Pilih Nama", list(karyawan_data.keys()))
         pin = st.text_input("PIN", type="password")
 
         if st.button("Login"):
-            if EMPLOYEES[nama]["pin"] == pin:
-                st.session_state.role = "karyawan"
-                st.session_state.user = nama
+            if pin == karyawan_data[nama]["pin"]:
+                st.session_state.login = ("karyawan", nama)
                 st.rerun()
             else:
                 st.error("PIN salah")
 
-    if mode == "Owner":
-        password = st.text_input("Password Owner", type="password")
-        if st.button("Login Owner"):
-            if password == OWNER_PASSWORD:
-                st.session_state.role = "owner"
+    else:
+        pwd = st.text_input("Password Owner", type="password")
+        if st.button("Login"):
+            if pwd == OWNER_PASSWORD:
+                st.session_state.login = ("owner", "OWNER")
                 st.rerun()
             else:
                 st.error("Password salah")
 
-# ================= KARYAWAN =================
+# ================== KARYAWAN ==================
+elif st.session_state.login[0] == "karyawan":
 
-elif st.session_state.role == "karyawan":
+    nama = st.session_state.login[1]
+    limit = karyawan_data[nama]["limit"]
 
-    nama = st.session_state.user
-    limit = EMPLOYEES[nama]["limit"]
+    st.header(f"Kasbon - {nama}")
 
-    st.title(f"💳 Kasbon - {nama}")
-
-    tanggal = st.date_input(
-        "Tanggal Kasbon",
-        value=date.today(),
-        max_value=date.today()
-    )
-
-    periode_ini = get_periode(tanggal)
-
-    pilihan_nominal = list(range(50000, 300001, 50000))
-    nominal = st.selectbox(
-        "Nominal",
-        pilihan_nominal,
-        format_func=lambda x: format_rp(x)
-    )
-
+    tanggal = st.date_input("Tanggal Kasbon", value=date.today())
+    nominal = st.selectbox("Nominal", [50000,100000,150000,200000,250000,300000])
     keterangan = st.text_area("Keterangan")
 
+    df = load_data()
+
     if not df.empty:
-        df["Periode"] = df["Tanggal"].apply(get_periode)
-        total_periode = df[
-            (df["Nama"] == nama) &
-            (df["Periode"] == periode_ini)
-        ]["Nominal"].sum()
+        df_periode = df[(df["nama"] == nama)]
+        total = df_periode["nominal"].sum()
     else:
-        total_periode = 0
+        total = 0
 
-    sisa = limit - total_periode
+    sisa = limit - total
+    st.info(f"Sisa Limit Anda: Rp {sisa:,.0f}")
 
-    st.info(f"Periode: {periode_ini}")
-    st.write(f"Limit: {format_rp(limit)}")
-    st.write(f"Terpakai: {format_rp(total_periode)}")
-    st.write(f"Sisa: {format_rp(sisa)}")
-
-    if st.button("Simpan Kasbon"):
-
-        if nominal > sisa:
-            st.error("Melebihi limit periode ini")
-        else:
-            backup_data()
-
-            new_row = {
-                "ID": str(uuid.uuid4())[:8],
-                "Tanggal": str(tanggal),
-                "Nama": nama,
-                "Nominal": nominal,
-                "Keterangan": keterangan
-            }
-
-            df.loc[len(df)] = new_row
-            df.to_csv(DATA_FILE, index=False)
+    if st.button("Ajukan Kasbon"):
+        if nominal <= sisa:
+            supabase.table("kasbon").insert({
+                "id": str(uuid.uuid4()),
+                "tanggal": tanggal.strftime("%Y-%m-%d"),
+                "nama": nama,
+                "nominal": nominal,
+                "keterangan": keterangan,
+                "periode": get_periode(tanggal)
+            }).execute()
             st.success("Kasbon berhasil disimpan")
             st.rerun()
-
-    st.divider()
-
-    if not df.empty:
-        st.subheader("Riwayat Periode Ini")
-        st.dataframe(
-            df[
-                (df["Nama"] == nama) &
-                (df["Tanggal"].apply(get_periode) == periode_ini)
-            ].sort_values("Tanggal", ascending=False),
-            use_container_width=True
-        )
+        else:
+            st.error("Melebihi limit")
 
     if st.button("Logout"):
-        st.session_state.role = None
-        st.session_state.user = None
+        st.session_state.login = None
         st.rerun()
 
-# ================= OWNER =================
+# ================== OWNER ==================
+else:
 
-elif st.session_state.role == "owner":
+    st.header("📊 Dashboard Owner")
 
-    st.title("📊 Dashboard Payroll Owner")
+    df = load_data()
 
-    if df.empty:
-        st.info("Belum ada data kasbon")
-    else:
+    if not df.empty:
 
-        df["Periode"] = df["Tanggal"].apply(get_periode)
+        st.subheader("Ringkasan")
 
-        pilih_periode = st.selectbox(
-            "Pilih Periode Payroll",
-            sorted(df["Periode"].unique())
-        )
+        summary = df.groupby("nama")["nominal"].sum().reset_index()
 
-        df_periode = df[df["Periode"] == pilih_periode]
+        for i, row in summary.iterrows():
+            limit = karyawan_data[row["nama"]]["limit"]
+            sisa = limit - row["nominal"]
+            st.write(f"{row['nama']} → Total: Rp {row['nominal']:,.0f} | Sisa: Rp {sisa:,.0f}")
 
-        col1, col2 = st.columns(2)
-        col1.metric("Total Kasbon", format_rp(df_periode["Nominal"].sum()))
-        col2.metric("Jumlah Transaksi", len(df_periode))
+        st.subheader("Grafik Kasbon")
+        fig = px.bar(summary, x="nama", y="nominal", color="nama")
+        st.plotly_chart(fig, use_container_width=True)
 
-        st.divider()
+        st.subheader("Data Lengkap")
+        st.dataframe(df)
 
-        grafik = df_periode.groupby("Nama")["Nominal"].sum().reset_index()
-
-        if not grafik.empty:
-            fig = px.bar(
-                grafik,
-                x="Nama",
-                y="Nominal",
-                color="Nama",
-                text="Nominal",
-                template="plotly_dark"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        st.divider()
-
-        st.subheader("Rekap Limit")
-
-        data_limit = []
-        for nama in EMPLOYEES:
-            total = df_periode[df_periode["Nama"] == nama]["Nominal"].sum()
-            limit = EMPLOYEES[nama]["limit"]
-            sisa = limit - total
-
-            data_limit.append({
-                "Nama": nama,
-                "Limit": format_rp(limit),
-                "Terpakai": format_rp(total),
-                "Sisa": format_rp(sisa)
-            })
-
-        st.dataframe(pd.DataFrame(data_limit), use_container_width=True)
-
-        st.divider()
-
+        # ===== PDF Slip =====
         st.subheader("Cetak Slip")
-        slip_id = st.text_input("Masukkan ID")
 
-        if slip_id:
-            slip = df[df["ID"] == slip_id]
-            if not slip.empty:
-                s = slip.iloc[0]
-                pdf_path = f"slip_{slip_id}.pdf"
+        pilih = st.selectbox("Pilih ID Kasbon", df["id"])
 
-                doc = SimpleDocTemplate(pdf_path, pagesize=A4)
-                elements = []
-                styles = getSampleStyleSheet()
+        if st.button("Cetak PDF"):
+            row = df[df["id"] == pilih].iloc[0]
 
-                elements.append(Paragraph("SLIP KASBON", styles["Title"]))
-                elements.append(Spacer(1, 0.5 * inch))
-                elements.append(Paragraph(f"ID: {s['ID']}", styles["Normal"]))
-                elements.append(Paragraph(f"Nama: {s['Nama']}", styles["Normal"]))
-                elements.append(Paragraph(f"Tanggal: {s['Tanggal']}", styles["Normal"]))
-                elements.append(Paragraph(f"Nominal: {format_rp(s['Nominal'])}", styles["Normal"]))
-                elements.append(Paragraph(f"Keterangan: {s['Keterangan']}", styles["Normal"]))
+            file_name = "slip_kasbon.pdf"
+            doc = SimpleDocTemplate(file_name, pagesize=A4)
+            styles = getSampleStyleSheet()
+            elements = []
 
-                doc.build(elements)
+            elements.append(Paragraph("SLIP KASBON", styles["Title"]))
+            elements.append(Spacer(1, 0.5 * inch))
+            elements.append(Paragraph(f"Nama: {row['nama']}", styles["Normal"]))
+            elements.append(Paragraph(f"Tanggal: {row['tanggal']}", styles["Normal"]))
+            elements.append(Paragraph(f"Nominal: Rp {row['nominal']:,.0f}", styles["Normal"]))
+            elements.append(Paragraph(f"Keterangan: {row['keterangan']}", styles["Normal"]))
+            elements.append(Paragraph(f"Periode: {row['periode']}", styles["Normal"]))
 
-                with open(pdf_path, "rb") as f:
-                    st.download_button("Download Slip PDF", f, file_name=pdf_path)
+            doc.build(elements)
 
-        st.divider()
+            with open(file_name, "rb") as f:
+                st.download_button("Download Slip PDF", f, file_name)
 
-        st.dataframe(df_periode.sort_values("Tanggal", ascending=False),
-                     use_container_width=True)
+    else:
+        st.info("Belum ada data kasbon")
 
     if st.button("Logout"):
-        st.session_state.role = None
+        st.session_state.login = None
         st.rerun()
