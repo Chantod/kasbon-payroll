@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
 from supabase import create_client
 
-st.set_page_config(page_title="Kasbon Ayam Penyet Neng Itok", layout="wide")
+st.set_page_config(page_title="Kasbon Payroll Enterprise", layout="wide")
 
 # ================= SUPABASE =================
 url = st.secrets["SUPABASE_URL"]
@@ -29,7 +29,7 @@ karyawan_data = {
 
 OWNER_PASSWORD = "owner123"
 
-# ================= FUNGSI PERIODE =================
+# ================= PERIODE FUNCTION =================
 def get_periode(tgl):
     tgl = pd.to_datetime(tgl)
     if tgl.day >= 25:
@@ -53,12 +53,12 @@ def load_data():
 if "login" not in st.session_state:
     st.session_state.login = None
 
-st.title("💰 Kasbon Ayam Penyet Neng Itok")
+st.title("💰 Sistem Kasbon Payroll Enterprise")
 
 # ================= LOGIN =================
 if st.session_state.login is None:
 
-    role = st.selectbox("Login sebagai", ["Karyawan", "Owner"], key="role_select")
+    role = st.selectbox("Login sebagai", ["Karyawan", "Owner"], key="role_login")
 
     if role == "Karyawan":
         nama = st.selectbox("Pilih Nama", list(karyawan_data.keys()), key="nama_login")
@@ -101,7 +101,7 @@ elif st.session_state.login[0] == "karyawan":
 
     if st.button("Ajukan Kasbon", key="btn_ajukan"):
         if nominal <= sisa:
-            supabase.table("kasbon").insert({
+            response = supabase.table("kasbon").insert({
                 "id": str(uuid.uuid4()),
                 "tanggal": tanggal.strftime("%Y-%m-%d"),
                 "nama": nama,
@@ -109,8 +109,12 @@ elif st.session_state.login[0] == "karyawan":
                 "keterangan": keterangan,
                 "periode": get_periode(tanggal)
             }).execute()
-            st.success("Kasbon berhasil disimpan")
-            st.rerun()
+
+            if response.data:
+                st.success("Kasbon berhasil disimpan")
+                st.rerun()
+            else:
+                st.error("Gagal menyimpan ke database")
         else:
             st.error("Melebihi limit")
 
@@ -155,15 +159,11 @@ else:
 
         df_nama = df[df["nama"] == pilih_nama].sort_values("tanggal", ascending=False)
 
-        if not df_nama.empty:
-            st.dataframe(
-                df_nama[["tanggal", "nominal", "keterangan", "periode"]],
-                use_container_width=True,
-                key="df_detail"
-            )
-
-            total_nama = df_nama["nominal"].sum()
-            st.success(f"Total Kasbon {pilih_nama}: Rp {total_nama:,.0f}")
+        st.dataframe(
+            df_nama[["tanggal", "nominal", "keterangan", "periode"]],
+            use_container_width=True,
+            key="df_detail"
+        )
 
         st.subheader("📊 Grafik Total Kasbon")
         fig = px.bar(summary, x="nama", y="nominal", color="nama")
@@ -174,47 +174,18 @@ else:
         pilih_id = st.selectbox("Hapus Per Transaksi", df["id"], key="hapus_id")
         if st.button("Hapus Transaksi", key="btn_hapus_id"):
             supabase.table("kasbon").delete().eq("id", pilih_id).execute()
-            st.success("Berhasil dihapus")
             st.rerun()
 
         pilih_nama_delete = st.selectbox("Hapus Semua Per Karyawan", df["nama"].unique(), key="hapus_nama")
         if st.button("Hapus Semua Data Karyawan", key="btn_hapus_nama"):
             supabase.table("kasbon").delete().eq("nama", pilih_nama_delete).execute()
-            st.success("Semua data dihapus")
             st.rerun()
 
         if st.checkbox("⚠ Saya yakin ingin hapus SEMUA data", key="checkbox_reset"):
             if st.button("Hapus Semua Data", key="btn_reset"):
                 supabase.table("kasbon").delete().neq("id", "").execute()
-                st.success("Semua data berhasil dihapus")
                 st.rerun()
-
-        st.subheader("🖨 Cetak Slip PDF")
-        pilih_pdf = st.selectbox("Pilih ID Slip", df["id"], key="pdf_id")
-
-        if st.button("Buat PDF", key="btn_pdf"):
-            row = df[df["id"] == pilih_pdf].iloc[0]
-
-            file_name = "slip_kasbon.pdf"
-            doc = SimpleDocTemplate(file_name, pagesize=A4)
-            styles = getSampleStyleSheet()
-            elements = []
-
-            elements.append(Paragraph("SLIP KASBON", styles["Title"]))
-            elements.append(Spacer(1, 0.5 * inch))
-            elements.append(Paragraph(f"Nama: {row['nama']}", styles["Normal"]))
-            elements.append(Paragraph(f"Tanggal: {row['tanggal'].strftime('%d-%m-%Y')}", styles["Normal"]))
-            elements.append(Paragraph(f"Nominal: Rp {row['nominal']:,.0f}", styles["Normal"]))
-            elements.append(Paragraph(f"Keterangan: {row['keterangan']}", styles["Normal"]))
-            elements.append(Paragraph(f"Periode: {row['periode']}", styles["Normal"]))
-
-            doc.build(elements)
-
-            with open(file_name, "rb") as f:
-                st.download_button("Download Slip PDF", f, file_name, key="download_pdf")
 
     if st.button("Logout", key="logout_owner"):
         st.session_state.login = None
         st.rerun()
-
-
