@@ -129,6 +129,41 @@ elif st.session_state.login[0] == "karyawan":
 else:
 
     st.header("📊 Dashboard Owner")
+    st.subheader("🗑 Hapus Data Kasbon")
+
+if not df.empty:
+
+    # ================= HAPUS PER BARIS =================
+    st.markdown("### Hapus Per Transaksi")
+    pilih_id = st.selectbox("Pilih ID untuk dihapus", df["id"])
+
+    if st.button("Hapus Transaksi Ini"):
+        supabase.table("kasbon").delete().eq("id", pilih_id).execute()
+        st.success("Transaksi berhasil dihapus")
+        st.rerun()
+
+    st.markdown("---")
+
+    # ================= HAPUS PER KARYAWAN =================
+    st.markdown("### Hapus Semua Kasbon Per Karyawan")
+    pilih_nama = st.selectbox("Pilih Karyawan", df["nama"].unique())
+
+    if st.button("Hapus Semua Data Karyawan Ini"):
+        supabase.table("kasbon").delete().eq("nama", pilih_nama).execute()
+        st.success("Semua data karyawan dihapus")
+        st.rerun()
+
+    st.markdown("---")
+
+    # ================= HAPUS SEMUA DATA =================
+    st.markdown("### ⚠ Hapus Semua Data (Danger Zone)")
+    konfirmasi = st.checkbox("Saya yakin ingin menghapus SEMUA data")
+
+    if konfirmasi:
+        if st.button("Hapus Semua Data Sekarang"):
+            supabase.table("kasbon").delete().neq("id", "").execute()
+            st.success("Semua data berhasil dihapus")
+            st.rerun()
 
     df = load_data()
 
@@ -182,4 +217,5 @@ else:
     if st.button("Logout"):
         st.session_state.login = None
         st.rerun()
+
 
