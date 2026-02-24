@@ -88,6 +88,24 @@ if st.session_state.login is None:
 
 # ================= KARYAWAN =================
 elif st.session_state.login[0] == "karyawan":
+    st.markdown("---")
+st.subheader("📜 Riwayat Kasbon Anda")
+
+if not df.empty:
+    df_user = df[df["nama"] == nama].sort_values("tanggal", ascending=False)
+
+    if not df_user.empty:
+        st.dataframe(
+            df_user[["tanggal", "nominal", "keterangan", "periode"]],
+            use_container_width=True
+        )
+
+        total_user = df_user["nominal"].sum()
+        st.info(f"Total Kasbon Anda Periode Ini: Rp {total_user:,.0f}")
+    else:
+        st.info("Belum ada kasbon")
+else:
+    st.info("Belum ada data")
 
     nama = st.session_state.login[1]
     limit = karyawan_data[nama]["limit"]
@@ -206,3 +224,4 @@ else:
     if st.button("Logout"):
         st.session_state.login = None
         st.rerun()
+
