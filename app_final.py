@@ -51,7 +51,7 @@ def load_data():
     response = supabase.table("kasbon").select("*").execute()
     if response.data:
         df = pd.DataFrame(response.data)
-        df["Tanggal"] = pd.to_datetime(df["tanggal"], errors="coerce")
+        df["tanggal"] = pd.to_datetime(df["tanggal"], errors="coerce")
         return df
     return pd.DataFrame()
 
@@ -88,24 +88,6 @@ if st.session_state.login is None:
 
 # ================= KARYAWAN =================
 elif st.session_state.login[0] == "karyawan":
-    st.markdown("---")
-st.subheader("📜 Riwayat Kasbon Anda")
-
-if not df.empty:
-    df_user = df[df["nama"] == nama].sort_values("tanggal", ascending=False)
-
-    if not df_user.empty:
-        st.dataframe(
-            df_user[["tanggal", "nominal", "keterangan", "periode"]],
-            use_container_width=True
-        )
-
-        total_user = df_user["nominal"].sum()
-        st.info(f"Total Kasbon Anda Periode Ini: Rp {total_user:,.0f}")
-    else:
-        st.info("Belum ada kasbon")
-else:
-    st.info("Belum ada data")
 
     nama = st.session_state.login[1]
     limit = karyawan_data[nama]["limit"]
@@ -117,7 +99,6 @@ else:
     keterangan = st.text_area("Keterangan")
 
     df = load_data()
-
     total = df[df["nama"] == nama]["nominal"].sum() if not df.empty else 0
     sisa = limit - total
 
@@ -138,6 +119,21 @@ else:
         else:
             st.error("Melebihi limit")
 
+    st.markdown("---")
+    st.subheader("📜 Riwayat Kasbon Anda")
+
+    if not df.empty:
+        df_user = df[df["nama"] == nama].sort_values("tanggal", ascending=False)
+        if not df_user.empty:
+            st.dataframe(
+                df_user[["tanggal", "nominal", "keterangan", "periode"]],
+                use_container_width=True
+            )
+        else:
+            st.info("Belum ada kasbon")
+    else:
+        st.info("Belum ada data")
+
     if st.button("Logout"):
         st.session_state.login = None
         st.rerun()
@@ -153,10 +149,9 @@ else:
         st.info("Belum ada data kasbon")
     else:
 
-        st.subheader("Ringkasan per Karyawan")
-
         summary = df.groupby("nama")["nominal"].sum().reset_index()
 
+        st.subheader("Ringkasan per Karyawan")
         for i, row in summary.iterrows():
             limit = karyawan_data[row["nama"]]["limit"]
             sisa = limit - row["nominal"]
@@ -169,40 +164,33 @@ else:
         st.subheader("Data Lengkap")
         st.dataframe(df)
 
-        # ================= HAPUS DATA =================
+        # HAPUS PER TRANSAKSI
         st.subheader("🗑 Hapus Data")
+        pilih_id = st.selectbox("Hapus Per Transaksi", df["id"])
+        if st.button("Hapus Transaksi"):
+            supabase.table("kasbon").delete().eq("id", pilih_id).execute()
+            st.success("Berhasil dihapus")
+            st.rerun()
 
-        col1, col2 = st.columns(2)
+        # HAPUS PER KARYAWAN
+        pilih_nama = st.selectbox("Hapus Semua Per Karyawan", df["nama"].unique())
+        if st.button("Hapus Semua Data Karyawan"):
+            supabase.table("kasbon").delete().eq("nama", pilih_nama).execute()
+            st.success("Semua data dihapus")
+            st.rerun()
 
-        with col1:
-            pilih_id = st.selectbox("Hapus Per Transaksi", df["id"])
-            if st.button("Hapus Transaksi"):
-                supabase.table("kasbon").delete().eq("id", pilih_id).execute()
-                st.success("Berhasil dihapus")
-                st.rerun()
-
-        with col2:
-            pilih_nama = st.selectbox("Hapus Semua Per Karyawan", df["nama"].unique())
-            if st.button("Hapus Semua Data Karyawan"):
-                supabase.table("kasbon").delete().eq("nama", pilih_nama).execute()
-                st.success("Semua data dihapus")
-                st.rerun()
-
-        st.markdown("---")
-
+        # RESET SEMUA
         if st.checkbox("⚠ Saya yakin ingin hapus SEMUA data"):
             if st.button("Hapus Semua Data"):
                 supabase.table("kasbon").delete().neq("id", "").execute()
                 st.success("Semua data berhasil dihapus")
                 st.rerun()
 
-        # ================= CETAK PDF =================
+        # CETAK PDF
         st.subheader("Cetak Slip PDF")
         pilih = st.selectbox("Pilih ID Slip", df["id"])
-
         if st.button("Buat PDF"):
             row = df[df["id"] == pilih].iloc[0]
-
             file_name = "slip_kasbon.pdf"
             doc = SimpleDocTemplate(file_name, pagesize=A4)
             styles = getSampleStyleSheet()
@@ -211,7 +199,7 @@ else:
             elements.append(Paragraph("SLIP KASBON", styles["Title"]))
             elements.append(Spacer(1, 0.5 * inch))
             elements.append(Paragraph(f"Nama: {row['nama']}", styles["Normal"]))
-            elements.append(Paragraph(f"Tanggal: {row['tanggal']}", styles["Normal"]))
+            elements.append(Paragraph(f"Tanggal: {row['tanggal'].strftime('%d-%m-%Y')}", styles["Normal"]))
             elements.append(Paragraph(f"Nominal: Rp {row['nominal']:,.0f}", styles["Normal"]))
             elements.append(Paragraph(f"Keterangan: {row['keterangan']}", styles["Normal"]))
             elements.append(Paragraph(f"Periode: {row['periode']}", styles["Normal"]))
@@ -224,4 +212,3 @@ else:
     if st.button("Logout"):
         st.session_state.login = None
         st.rerun()
-
