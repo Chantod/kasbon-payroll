@@ -18,9 +18,9 @@ supabase = create_client(url, key)
 
 # ================= DATA KARYAWAN =================
 karyawan_data = {
-    "Hana": {"pin": "1234", "limit": 3000000},
+    "Hana": {"pin": "1111", "limit": 3000000},
     "Tuje": {"pin": "2222", "limit": 3000000},
-    "Icha": {"pin": "3333", "limit": 2500000},
+    "Icha": {"pin": "3333", "limit": 2200000},
     "Fikri": {"pin": "4444", "limit": 1900000},
     "Iki": {"pin": "5555", "limit": 1600000},
     "Lia": {"pin": "6666", "limit": 1500000},
@@ -189,3 +189,4 @@ else:
     if st.button("Logout", key="logout_owner"):
         st.session_state.login = None
         st.rerun()
+
