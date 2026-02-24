@@ -34,16 +34,10 @@ def get_periode(tgl):
     tgl = pd.to_datetime(tgl)
     if tgl.day >= 25:
         start = datetime(tgl.year, tgl.month, 25)
-        if tgl.month == 12:
-            end = datetime(tgl.year + 1, 1, 24)
-        else:
-            end = datetime(tgl.year, tgl.month + 1, 24)
+        end = (start + pd.DateOffset(months=1)).replace(day=24)
     else:
-        if tgl.month == 1:
-            start = datetime(tgl.year - 1, 12, 25)
-        else:
-            start = datetime(tgl.year, tgl.month - 1, 25)
-        end = datetime(tgl.year, tgl.month, 24)
+        start = (tgl - pd.DateOffset(months=1)).replace(day=25)
+        end = tgl.replace(day=24)
     return f"{start.strftime('%d %b %Y')} - {end.strftime('%d %b %Y')}"
 
 # ================= LOAD DATA =================
@@ -64,13 +58,13 @@ st.title("💰 Sistem Kasbon Payroll Enterprise")
 # ================= LOGIN =================
 if st.session_state.login is None:
 
-    role = st.selectbox("Login sebagai", ["Karyawan", "Owner"])
+    role = st.selectbox("Login sebagai", ["Karyawan", "Owner"], key="role_select")
 
     if role == "Karyawan":
-        nama = st.selectbox("Pilih Nama", list(karyawan_data.keys()))
-        pin = st.text_input("PIN", type="password")
+        nama = st.selectbox("Pilih Nama", list(karyawan_data.keys()), key="nama_login")
+        pin = st.text_input("PIN", type="password", key="pin_login")
 
-        if st.button("Login"):
+        if st.button("Login Karyawan", key="btn_login_karyawan"):
             if pin == karyawan_data[nama]["pin"]:
                 st.session_state.login = ("karyawan", nama)
                 st.rerun()
@@ -78,8 +72,9 @@ if st.session_state.login is None:
                 st.error("PIN salah")
 
     else:
-        pwd = st.text_input("Password Owner", type="password")
-        if st.button("Login"):
+        pwd = st.text_input("Password Owner", type="password", key="pwd_owner")
+
+        if st.button("Login Owner", key="btn_login_owner"):
             if pwd == OWNER_PASSWORD:
                 st.session_state.login = ("owner", "OWNER")
                 st.rerun()
@@ -94,9 +89,9 @@ elif st.session_state.login[0] == "karyawan":
 
     st.header(f"Kasbon - {nama}")
 
-    tanggal = st.date_input("Tanggal Kasbon", value=date.today())
-    nominal = st.selectbox("Nominal", [50000,100000,150000,200000,250000,300000])
-    keterangan = st.text_area("Keterangan")
+    tanggal = st.date_input("Tanggal Kasbon", value=date.today(), key="tgl_kasbon")
+    nominal = st.selectbox("Nominal", [50000,100000,150000,200000,250000,300000], key="nominal_kasbon")
+    keterangan = st.text_area("Keterangan", key="ket_kasbon")
 
     df = load_data()
     total = df[df["nama"] == nama]["nominal"].sum() if not df.empty else 0
@@ -104,7 +99,7 @@ elif st.session_state.login[0] == "karyawan":
 
     st.info(f"Sisa Limit Anda: Rp {sisa:,.0f}")
 
-    if st.button("Ajukan Kasbon"):
+    if st.button("Ajukan Kasbon", key="btn_ajukan"):
         if nominal <= sisa:
             supabase.table("kasbon").insert({
                 "id": str(uuid.uuid4()),
@@ -127,14 +122,15 @@ elif st.session_state.login[0] == "karyawan":
         if not df_user.empty:
             st.dataframe(
                 df_user[["tanggal", "nominal", "keterangan", "periode"]],
-                use_container_width=True
+                use_container_width=True,
+                key="df_user"
             )
         else:
             st.info("Belum ada kasbon")
     else:
         st.info("Belum ada data")
 
-    if st.button("Logout"):
+    if st.button("Logout", key="logout_karyawan"):
         st.session_state.login = None
         st.rerun()
 
@@ -143,51 +139,7 @@ else:
 
     st.header("📊 Dashboard Owner")
 
-df = load_data()
-
-if df.empty:
-    st.info("Belum ada data kasbon")
-else:
-
-    # ================= REKAP TOTAL PER NAMA =================
-    st.subheader("📌 Rekap Total Kasbon Per Karyawan")
-
-    summary = df.groupby("nama")["nominal"].sum().reset_index()
-    summary = summary.sort_values("nominal", ascending=False)
-
-    st.dataframe(summary, use_container_width=True)
-
-    # ================= PILIH NAMA UNTUK DETAIL =================
-    st.markdown("---")
-    st.subheader("🔎 Detail Riwayat Per Karyawan")
-
-    pilih_nama = st.selectbox("Pilih Karyawan", summary["nama"])
-
-    df_nama = df[df["nama"] == pilih_nama].sort_values("tanggal", ascending=False)
-
-    if not df_nama.empty:
-        st.dataframe(
-            df_nama[["tanggal", "nominal", "keterangan", "periode"]],
-            use_container_width=True
-        )
-
-        total_nama = df_nama["nominal"].sum()
-        st.success(f"Total Kasbon {pilih_nama}: Rp {total_nama:,.0f}")
-
-        # ================= REKAP PER PERIODE =================
-        st.markdown("### 📆 Rekap Per Periode")
-        periode_summary = df_nama.groupby("periode")["nominal"].sum().reset_index()
-        st.dataframe(periode_summary, use_container_width=True)
-
-    else:
-        st.info("Belum ada data untuk karyawan ini")
-
-    # ================= GRAFIK =================
-    st.markdown("---")
-    st.subheader("📊 Grafik Total Kasbon")
-
-    fig = px.bar(summary, x="nama", y="nominal", color="nama")
-    st.plotly_chart(fig, use_container_width=True)
+    df = load_data()
 
     if df.empty:
         st.info("Belum ada data kasbon")
@@ -195,46 +147,54 @@ else:
 
         summary = df.groupby("nama")["nominal"].sum().reset_index()
 
-        st.subheader("Ringkasan per Karyawan")
-        for i, row in summary.iterrows():
-            limit = karyawan_data[row["nama"]]["limit"]
-            sisa = limit - row["nominal"]
-            st.write(f"{row['nama']} → Total: Rp {row['nominal']:,.0f} | Sisa: Rp {sisa:,.0f}")
+        st.subheader("📌 Rekap Total Per Karyawan")
+        st.dataframe(summary, use_container_width=True, key="rekap_summary")
 
-        st.subheader("Grafik Kasbon")
+        st.subheader("🔎 Detail Riwayat Per Karyawan")
+        pilih_nama = st.selectbox("Pilih Karyawan", summary["nama"], key="select_detail")
+
+        df_nama = df[df["nama"] == pilih_nama].sort_values("tanggal", ascending=False)
+
+        if not df_nama.empty:
+            st.dataframe(
+                df_nama[["tanggal", "nominal", "keterangan", "periode"]],
+                use_container_width=True,
+                key="df_detail"
+            )
+
+            total_nama = df_nama["nominal"].sum()
+            st.success(f"Total Kasbon {pilih_nama}: Rp {total_nama:,.0f}")
+
+        st.subheader("📊 Grafik Total Kasbon")
         fig = px.bar(summary, x="nama", y="nominal", color="nama")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="grafik_owner")
 
-        st.subheader("Data Lengkap")
-        st.dataframe(df)
-
-        # HAPUS PER TRANSAKSI
         st.subheader("🗑 Hapus Data")
-        pilih_id = st.selectbox("Hapus Per Transaksi", df["id"])
-        if st.button("Hapus Transaksi"):
+
+        pilih_id = st.selectbox("Hapus Per Transaksi", df["id"], key="hapus_id")
+        if st.button("Hapus Transaksi", key="btn_hapus_id"):
             supabase.table("kasbon").delete().eq("id", pilih_id).execute()
             st.success("Berhasil dihapus")
             st.rerun()
 
-        # HAPUS PER KARYAWAN
-        pilih_nama = st.selectbox("Hapus Semua Per Karyawan", df["nama"].unique())
-        if st.button("Hapus Semua Data Karyawan"):
-            supabase.table("kasbon").delete().eq("nama", pilih_nama).execute()
+        pilih_nama_delete = st.selectbox("Hapus Semua Per Karyawan", df["nama"].unique(), key="hapus_nama")
+        if st.button("Hapus Semua Data Karyawan", key="btn_hapus_nama"):
+            supabase.table("kasbon").delete().eq("nama", pilih_nama_delete).execute()
             st.success("Semua data dihapus")
             st.rerun()
 
-        # RESET SEMUA
-        if st.checkbox("⚠ Saya yakin ingin hapus SEMUA data"):
-            if st.button("Hapus Semua Data"):
+        if st.checkbox("⚠ Saya yakin ingin hapus SEMUA data", key="checkbox_reset"):
+            if st.button("Hapus Semua Data", key="btn_reset"):
                 supabase.table("kasbon").delete().neq("id", "").execute()
                 st.success("Semua data berhasil dihapus")
                 st.rerun()
 
-        # CETAK PDF
-        st.subheader("Cetak Slip PDF")
-        pilih = st.selectbox("Pilih ID Slip", df["id"])
-        if st.button("Buat PDF"):
-            row = df[df["id"] == pilih].iloc[0]
+        st.subheader("🖨 Cetak Slip PDF")
+        pilih_pdf = st.selectbox("Pilih ID Slip", df["id"], key="pdf_id")
+
+        if st.button("Buat PDF", key="btn_pdf"):
+            row = df[df["id"] == pilih_pdf].iloc[0]
+
             file_name = "slip_kasbon.pdf"
             doc = SimpleDocTemplate(file_name, pagesize=A4)
             styles = getSampleStyleSheet()
@@ -251,9 +211,8 @@ else:
             doc.build(elements)
 
             with open(file_name, "rb") as f:
-                st.download_button("Download Slip PDF", f, file_name)
+                st.download_button("Download Slip PDF", f, file_name, key="download_pdf")
 
-    if st.button("Logout"):
+    if st.button("Logout", key="logout_owner"):
         st.session_state.login = None
         st.rerun()
-
